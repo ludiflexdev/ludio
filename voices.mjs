@@ -6,8 +6,8 @@ const SIGNED_PREVIEW_HOST = 'c97f3361a1c971323738e24f451a0225.r2.cloudflarestora
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
-export function normalizeVoice(value) {
-  if (!value || !VOICE_ID.test(value._id || '') || value.type !== 'tts' || value.state !== 'trained' || value.dmca_taken_down || value.pvc_release_state === 'retiring') return null;
+export function normalizeVoice(value, { includePending = false } = {}) {
+  if (!value || !VOICE_ID.test(value._id || '') || value.type !== 'tts' || (!includePending && value.state !== 'trained') || !['trained', 'created', 'training', 'failed'].includes(value.state) || value.dmca_taken_down || value.pvc_release_state === 'retiring') return null;
   const strings = (items) => Array.isArray(items) ? items.filter((v) => typeof v === 'string').slice(0, 20).map((v) => v.slice(0, 80)) : [];
   const sample = value.samples?.find((sample) => safePreviewUrl(sample?.audio));
   return {
@@ -18,6 +18,7 @@ export function normalizeVoice(value) {
     tags: strings(value.tags),
     author: typeof value.author?.nickname === 'string' ? value.author.nickname.slice(0, 100) : '',
     licensed: value.licensed === true,
+    state: value.state,
     preview: sample ? `/api/voices/${value._id.toLowerCase()}/preview` : null,
   };
 }
@@ -84,13 +85,14 @@ export function createVoiceApi({ apiKey, fetchImpl }) {
       const result = await entity(`/model?${params}`);
       if (!Array.isArray(result.items)) throw fail(502, 'Fish Audio returned an invalid voice catalog.');
       return {
-        items: result.items.map(normalizeVoice).filter(Boolean),
+        items: result.items.map((voice) => normalizeVoice(voice, { includePending: search.get('source') === 'mine' })).filter(Boolean),
         total: Number.isFinite(result.total) ? result.total : result.items.length,
         hasMore: typeof result.has_more === 'boolean' ? result.has_more : page * 12 < result.total,
         page,
       };
     },
     async get(id) { return (await detail(id)).voice; },
+    invalidate() { cache.clear(); },
     async preview(id) {
       const { raw } = await detail(id);
       const url = raw.samples?.map((sample) => safePreviewUrl(sample?.audio)).find(Boolean);

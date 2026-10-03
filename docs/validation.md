@@ -2,6 +2,16 @@
 
 October 3, 2026.
 
+## Free studio expansion
+
+The current offline suite passes **34 tests**, including free-model enforcement for all four formats, dialogue and pronunciation payloads, private fast-clone uploads with automatic synthesis disabled, custom voice editing/deletion, pending voice status and refresh, mutation origin checks, the bundled font route, and timestamp streams. Timestamp checks cover fragmented UTF-8/SSE frames, cumulative snapshot replacement, global timing offsets, subtitle export, and safe failure without retrying another model. Docker build context includes the new server modules.
+
+A temporary Happy DOM and IndexedDB smoke check verified frontend startup, voice selection, cue insertion at the cursor, dialogue selection, pronunciation editing, PCM generation/playback URLs/download metadata, saved preferences, recording reuse, catalog refresh, and SRT download contents using mocked provider responses. No permanent frontend test dependencies were added.
+
+The local server on port 5173 was restarted; `/fonts/manrope-variable.ttf` now returns HTTP 200, `font/ttf`, and the expected 164,700 bytes. The earlier server returned 404 for this route.
+
+The added clone/edit/delete flows are covered with mocked providers; no real account voice was created or deleted during this expansion. New format controls and the current layout have not been visually inspected in a browser in this session because no browser automation surface was available. Earlier browser checks below describe the prior interface.
+
 ## Offline checks
 
 `npm test`: 14 tests covering request validation, safe configuration, secret/static-file isolation, free-engine enforcement, error recovery, one active generation, explicit voice IDs across two requests, catalog filtering/normalization, preview-host restrictions, bounded preview responses, and provider failures. JavaScript syntax checks cover the frontend modules.

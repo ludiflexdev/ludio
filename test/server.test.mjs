@@ -73,7 +73,7 @@ test('missing credentials, paid or misspelled models, and foreign origins never 
   await withServer({ apiKey: 'test', model: FREE_MODEL, fetchImpl }, async (base) => {
     assert.equal((await post(base, { text: 'Hello' }, { Origin: 'https://example.com' })).status, 403);
     assert.equal((await post(base, { text: ' ' })).status, 400);
-    const oversized = await post(base, { text: 'a'.repeat(25000) });
+    const oversized = await post(base, { text: 'a'.repeat(160000) });
     assert.equal(oversized.status, 413);
   });
 });

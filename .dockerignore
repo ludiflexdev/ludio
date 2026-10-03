@@ -4,6 +4,9 @@
 !server.mjs
 !voices.mjs
 !deployment.mjs
+!studio-api.mjs
+!speech-options.mjs
+!timestamps.mjs
 !public/
 !public/**
 **/.env*

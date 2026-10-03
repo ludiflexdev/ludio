@@ -5,7 +5,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=5173
 
-COPY --chown=node:node package.json server.mjs voices.mjs deployment.mjs ./
+COPY --chown=node:node package.json server.mjs voices.mjs studio-api.mjs speech-options.mjs timestamps.mjs deployment.mjs ./
 COPY --chown=node:node public/ ./public/
 
 USER node

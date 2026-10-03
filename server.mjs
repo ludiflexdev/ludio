@@ -6,6 +6,9 @@ import { performance } from 'node:perf_hooks';
 import { resolve } from 'node:path';
 import { createVoiceApi } from './voices.mjs';
 import { deploymentConfig, createAccessGuard } from './deployment.mjs';
+import { createStudioApi, readMultipart } from './studio-api.mjs';
+import { speechOptions, audioTypes } from './speech-options.mjs';
+import { readTimestampAudio } from './timestamps.mjs';
 
 try {
   loadEnvFile(fileURLToPath(new URL('.env', import.meta.url)));
@@ -15,13 +18,17 @@ try {
 
 export const FREE_MODEL = 's2.1-pro-free';
 const MAX_TEXT = 3000;
-const MAX_BODY = 24_000;
+const MAX_BODY = 160_000;
 const assets = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   ['/styles.css', ['public/styles.css', 'text/css; charset=utf-8']],
   ['/app.js', ['public/app.js', 'text/javascript; charset=utf-8']],
   ['/storage.js', ['public/storage.js', 'text/javascript; charset=utf-8']],
+  ['/emotions.js', ['public/emotions.js', 'text/javascript; charset=utf-8']],
+  ['/audio.js', ['public/audio.js', 'text/javascript; charset=utf-8']],
+  ['/subtitles.js', ['public/subtitles.js', 'text/javascript; charset=utf-8']],
   ['/favicon.svg', ['public/favicon.svg', 'image/svg+xml']],
+  ['/fonts/manrope-variable.ttf', ['public/fonts/manrope-variable.ttf', 'font/ttf']],
 ]);
 
 function json(res, status, value) {
@@ -67,13 +74,14 @@ export function validateSpeech(input) {
   if (typeof speed !== 'number' || !Number.isFinite(speed) || speed < 0.5 || speed > 1.5) {
     throw httpError(400, 'Speed must be between 0.5 and 1.5.');
   }
+  const volume = input.volume ?? 0;
+  if (typeof volume !== 'number' || !Number.isFinite(volume) || volume < -20 || volume > 20) throw httpError(400, 'Volume must be between -20 and 20 dB.');
+  if (input.normalizeLoudness !== undefined && typeof input.normalizeLoudness !== 'boolean') throw httpError(400, 'Invalid loudness normalization setting.');
   return {
     text,
-    format: 'mp3',
-    mp3_bitrate: 128,
-    latency: 'normal',
-    prosody: { speed, volume: 0 },
+    prosody: { speed, volume, ...(input.normalizeLoudness !== undefined ? { normalize_loudness: input.normalizeLoudness } : {}) },
     ...(referenceId.trim() ? { reference_id: referenceId.trim() } : {}),
+    ...speechOptions(input, text),
   };
 }
 
@@ -90,6 +98,7 @@ const providerErrors = {
 export function createApp({ apiKey = process.env.FISH_API_KEY, model = process.env.FISH_MODEL || FREE_MODEL, fetchImpl = fetch, deployment = deploymentConfig() } = {}) {
   let generating = false;
   const voices = createVoiceApi({ apiKey, fetchImpl });
+  const studio = createStudioApi({ apiKey, fetchImpl });
   const access = createAccessGuard(deployment);
   return createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -101,7 +110,7 @@ export function createApp({ apiKey = process.env.FISH_API_KEY, model = process.e
         return json(res, 200, { status: 'ok' });
       }
       if (!access.authorized(req.headers.authorization)) {
-        res.setHeader('WWW-Authenticate', 'Basic realm="Fish Studio", charset="UTF-8"');
+        res.setHeader('WWW-Authenticate', 'Basic realm="Studio", charset="UTF-8"');
         return json(res, 401, { error: 'Sign in to access this studio.' });
       }
       if (req.method === 'GET' && url.pathname === '/api/status') {
@@ -112,7 +121,19 @@ export function createApp({ apiKey = process.env.FISH_API_KEY, model = process.e
           maxCharacters: MAX_TEXT,
         });
       }
+      const ownedVoice = url.pathname.match(/^\/api\/custom-voices\/([a-f0-9]{32})$/i);
+      if ((req.method === 'POST' && url.pathname === '/api/custom-voices') || (ownedVoice && ['PATCH', 'DELETE'].includes(req.method))) {
+        if (!access.allowedOrigin(req)) throw httpError(403, 'Open the studio at its configured domain to use these tools.');
+        if (!access.allowGeneration()) throw httpError(429, 'Studio request limit reached. Wait a minute and retry.');
+        let result;
+        if (url.pathname === '/api/custom-voices') result = await studio.clone(await readMultipart(req));
+        else if (req.method === 'PATCH') result = await studio.update(ownedVoice[1].toLowerCase(), await readJson(req));
+        else result = await studio.remove(ownedVoice[1].toLowerCase());
+        if (url.pathname.includes('voices')) voices.invalidate();
+        return json(res, url.pathname === '/api/custom-voices' ? 201 : 200, result);
+      }
       if (req.method === 'GET' && url.pathname === '/api/voices') {
+        if (url.searchParams.get('refresh') === '1') voices.invalidate();
         return json(res, 200, await voices.list(url.searchParams));
       }
       const voiceRoute = url.pathname.match(/^\/api\/voices\/([a-f0-9]{32})(\/preview)?$/i);
@@ -126,7 +147,9 @@ export function createApp({ apiKey = process.env.FISH_API_KEY, model = process.e
       }
       if (req.method === 'POST' && url.pathname === '/api/tts') {
         if (!access.allowedOrigin(req)) throw httpError(403, 'Open the studio at its configured domain to generate speech.');
-        const body = validateSpeech(await readJson(req));
+        const input = await readJson(req);
+        const body = validateSpeech(input);
+        if (input.timestamps !== undefined && typeof input.timestamps !== 'boolean') throw httpError(400, 'Invalid timestamp setting.');
         if (!apiKey?.trim()) throw httpError(503, 'Add FISH_API_KEY to .env, then restart the server.');
         if (model !== FREE_MODEL) {
           throw httpError(409, `Set FISH_MODEL=${FREE_MODEL} in .env and restart. This prototype only uses the free model.`);
@@ -143,7 +166,7 @@ export function createApp({ apiKey = process.env.FISH_API_KEY, model = process.e
         res.on('close', onClose);
         const started = performance.now();
         try {
-          const upstream = await fetchImpl('https://api.fish.audio/v1/tts', {
+          const upstream = await fetchImpl(`https://api.fish.audio/v1/tts${input.timestamps ? '/stream/with-timestamp' : ''}`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${apiKey.trim()}`,
@@ -160,22 +183,24 @@ export function createApp({ apiKey = process.env.FISH_API_KEY, model = process.e
             throw httpError(status, providerErrors[upstream.status] || `Fish Audio returned HTTP ${upstream.status}. Try again later.`);
           }
           const type = upstream.headers.get('content-type') || '';
-          if (!type.startsWith('audio/') && !type.startsWith('application/octet-stream')) {
+          if (!input.timestamps && !type.startsWith('audio/') && !type.startsWith('application/octet-stream')) {
             await upstream.body?.cancel();
             throw httpError(502, 'Fish Audio returned an unexpected response instead of audio.');
           }
-          const audio = Buffer.from(await upstream.arrayBuffer());
+          const timestamped = input.timestamps ? await readTimestampAudio(upstream) : null;
+          const audio = timestamped?.audio || Buffer.from(await upstream.arrayBuffer());
           if (!audio.length) throw httpError(502, 'Fish Audio returned empty audio. Try again.');
           const elapsed = Math.round(performance.now() - started);
+          const result = timestamped ? Buffer.from(JSON.stringify({ audioBase64: audio.toString('base64'), timeline: timestamped.timeline })) : audio;
           res.writeHead(200, {
-            'Content-Type': 'audio/mpeg',
-            'Content-Length': audio.length,
-            'Content-Disposition': 'attachment; filename="fish-audio.mp3"',
+            'Content-Type': timestamped ? 'application/json; charset=utf-8' : audioTypes[body.format],
+            'Content-Length': result.length,
+            ...(!timestamped ? { 'Content-Disposition': `attachment; filename="recording.${body.format}"` } : {}),
             'X-Generation-Ms': elapsed,
             'X-Fish-Model': FREE_MODEL,
-            'X-Fish-Voice-Id': body.reference_id || '',
+            'X-Fish-Voice-Id': Array.isArray(body.reference_id) ? body.reference_id.join(',') : body.reference_id || '',
           });
-          res.end(audio);
+          res.end(result);
           console.log(`Speech generated: ${body.text.length} characters, ${audio.length} bytes, ${elapsed}ms.`);
         } catch (error) {
           if (controller.signal.aborted) throw httpError(504, 'Generation timed out or was cancelled. The free tier can be busy; try a shorter script.');
@@ -212,7 +237,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     console.error(error.code === 'EADDRINUSE' ? `Port ${port} is already in use. Set PORT in .env to another port.` : `Server could not start: ${error.code}`);
     process.exitCode = 1;
   });
-  server.listen(port, deployment.host, () => console.log(`Fish Studio: ${deployment.publicOrigin || `http://${deployment.host}:${port}`}`));
+  server.listen(port, deployment.host, () => console.log(`Studio: ${deployment.publicOrigin || `http://${deployment.host}:${port}`}`));
   const shutdown = () => {
     server.close(() => process.exit(0));
     setTimeout(() => { server.closeAllConnections(); process.exit(0); }, 125_000).unref();

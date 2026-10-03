@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!package.json
+!server.mjs
+!voices.mjs
+!deployment.mjs
+!public/
+!public/**
+**/.env*
+**/*.log
+**/node_modules/

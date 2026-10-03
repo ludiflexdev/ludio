@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#141615">
+  <title>Fish Studio</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#create"><img src="/favicon.svg" width="34" height="34" alt=""><span>fish<span class="brand-slash">/</span><span class="brand-studio">studio</span></span></a>
+    <div class="workspace-label"><span class="workspace-avatar">W</span><div>Personal workspace<small>Local studio</small></div><span class="workspace-dot"></span></div>
+    <div class="nav-caption">WORKSPACE</div>
+    <nav aria-label="Main navigation">
+      <a href="#create" class="nav-item active" data-page="create"><span data-icon="wave"></span>Create speech<span class="nav-key">⌘ ↵</span></a>
+      <a href="#voices" class="nav-item" data-page="voices"><span data-icon="voices"></span>Voice library<span id="favorite-count" class="nav-count">0</span></a>
+      <a href="#recordings" class="nav-item" data-page="recordings"><span data-icon="folder"></span>Recordings<span id="recording-count" class="nav-count">0</span></a>
+    </nav>
+    <div class="sidebar-bottom"><div class="plan-card"><div><span class="status-dot"></span>Developer access<span class="mini-badge">FREE</span></div><p>S2.1 Pro</p><a href="https://fish.audio/blog/s2-1-pro-free-api/" target="_blank" rel="noreferrer">Promo through Nov 30 <span>↗</span></a></div><div class="connection-line"><span id="connection-dot" class="status-dot muted"></span><span id="connection-status">Connecting</span><button id="check-connection" class="icon-button" title="Check connection" aria-label="Check connection"><span data-icon="refresh"></span></button></div></div>
+  </aside>
+  <div class="app-shell">
+    <header class="app-header"><div class="breadcrumb">Workspace <span>/</span> <strong id="breadcrumb-page">Create speech</strong></div><div class="header-actions"><span class="engine-badge"><span class="status-dot"></span>S2.1 Pro <span class="engine-free">Free</span></span><a class="icon-button" href="https://docs.fish.audio/api-reference/introduction" target="_blank" rel="noreferrer" title="API documentation" aria-label="API documentation"><span data-icon="external"></span></a></div></header>
+    <main>
+      <section id="page-create" class="page" aria-labelledby="create-heading">
+        <div class="page-heading"><div><div class="eyebrow">AUDIO STUDIO</div><h1 id="create-heading">Create speech</h1><p>Your words. A voice you can make your own.</p></div><button class="secondary" id="new-script"><span data-icon="plus"></span>New script</button></div>
+        <div class="studio-grid">
+          <form id="speech-form" class="editor panel">
+            <div class="editor-top"><span data-icon="text"></span><label class="sr-only" for="recording-title">Recording title</label><input id="recording-title" maxlength="100" value="Untitled recording"><span id="draft-status" class="subtle">Draft saved</span></div>
+            <div class="editor-toolbar"><span class="editor-tab">Script</span><div class="toolbar-actions"><span class="subtle">Insert emotion</span><button type="button" class="text-button emotion" data-emotion="[excited]">Excited</button><button type="button" class="text-button emotion" data-emotion="[whispering]">Whisper</button><button type="button" class="text-button emotion" data-emotion="[chuckle]">Chuckle</button><button id="example-button" type="button" class="icon-button" title="Use a sample script" aria-label="Use a sample script"><span data-icon="sparkles"></span></button></div></div>
+            <label class="sr-only" for="script">Speech script</label><textarea id="script" maxlength="3000" required placeholder="Start writing, or try a sample script…" spellcheck="true"></textarea>
+            <div class="editor-stats"><span><span data-icon="clock"></span><span id="duration-estimate">~0s speech</span></span><span id="char-count">0 / 3,000 characters</span></div>
+            <div class="editor-bottom"><span class="shortcut"><kbd>Ctrl</kbd><kbd>↵</kbd><span>to generate</span></span><button id="generate" class="primary" type="submit" disabled><span data-icon="wave"></span><span id="generate-label">Generate speech</span><span class="button-end">↗</span></button></div>
+          </form>
+          <aside class="settings panel" aria-label="Speech settings">
+            <div class="panel-header"><h2>Voice settings</h2><span data-icon="sliders"></span></div>
+            <div class="settings-body"><div class="setting-label">VOICE<button id="change-voice" class="text-button accent">Change ↗</button></div><div id="selected-voice" class="selected-voice empty"><div class="avatar" data-tone="mint"><span data-icon="voices"></span></div><div><strong>Choose a voice</strong><p>Browse the voice library</p></div></div><button id="preview-selected" class="secondary full" disabled><span data-icon="play"></span>Preview voice</button><div class="setting-divider"></div><label class="setting-label" for="speed">SPEAKING SPEED<output id="speed-value" for="speed">1.0×</output></label><input id="speed" type="range" min="0.5" max="1.5" step="0.1" value="1"><div class="range-labels"><span>0.5×</span><button id="reset-speed" class="text-button">Reset</button><span>1.5×</span></div><div class="setting-divider"></div><div class="setting-label engine-label">ENGINE</div><div class="engine-setting"><span class="engine-icon" data-icon="sparkles"></span><div><strong>S2.1 Pro</strong><small>s2.1-pro-free</small></div><span class="mini-badge">FREE</span></div><div class="output-setting"><span>Output</span><strong>MP3 <span>·</span> 128 kbps</strong></div></div>
+            <div class="settings-note"><span data-icon="lock"></span><span>Your chosen voice is kept for the next recording.</span></div>
+          </aside>
+        </div>
+        <div id="generation-message" class="message" role="status" aria-live="polite" hidden></div>
+        <section id="current-result" class="result panel" aria-labelledby="result-title" hidden><div class="result-heading"><div><span class="eyebrow">LATEST GENERATION</span><h2 id="result-title"></h2><p id="result-voice"></p></div><span class="mini-badge" id="result-saved">SAVED</span></div><audio id="player" controls aria-label="Latest generated recording"></audio><div class="result-bottom"><span id="result-details" class="subtle"></span><div class="result-actions"><button id="reuse-current" class="secondary small"><span data-icon="reuse"></span>Reuse settings</button><a id="download" class="primary small" download="recording.mp3"><span data-icon="download"></span>Download</a></div></div><details class="recording-details"><summary>Voice &amp; engine details</summary><div id="result-identity"></div></details></section>
+        <section class="recent-section"><div class="section-heading"><h2>Recent recordings <span id="recent-count">0</span></h2><a href="#recordings" class="text-link">View all ↗</a></div><div id="recent-recordings" class="recordings-list"></div></section>
+      </section>
+      <section id="page-voices" class="page" aria-labelledby="voices-heading" hidden>
+        <div class="page-heading"><div><div class="eyebrow">FIND YOUR SOUND</div><h1 id="voices-heading">Voice library</h1><p>Listen first. Pick a voice. Keep it consistent.</p></div><button id="add-voice" class="secondary"><span data-icon="plus"></span>Add voice ID</button></div>
+        <div class="library-toolbar"><div class="search-field"><span data-icon="search"></span><label class="sr-only" for="voice-search">Search voices</label><input id="voice-search" type="search" placeholder="Search voices" maxlength="100"></div><label class="sr-only" for="voice-language">Voice language</label><select id="voice-language"><option value="en">English</option><option value="">All languages</option><option value="fr">French</option><option value="es">Spanish</option><option value="pt">Portuguese</option><option value="de">German</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="zh">Chinese</option><option value="ar">Arabic</option><option value="hi">Hindi</option></select></div>
+        <div class="library-tabs" role="tablist" aria-label="Voice source"><button class="active" role="tab" aria-selected="true" data-source="licensed">Licensed voices</button><button role="tab" aria-selected="false" data-source="community">Community</button><button role="tab" aria-selected="false" data-source="mine">My voices</button><button role="tab" aria-selected="false" data-source="saved">Saved <span id="saved-tab-count">0</span></button></div>
+        <div class="catalog-heading"><span id="catalog-summary">Loading voice library…</span><span class="subtle">Previews use existing samples</span></div><div id="catalog-message" class="message" role="status" hidden></div><div id="voice-grid" class="voice-grid"></div><button id="load-more" class="secondary load-more" hidden>Load more voices</button>
+      </section>
+      <section id="page-recordings" class="page" aria-labelledby="recordings-heading" hidden>
+        <div class="page-heading"><div><div class="eyebrow">YOUR AUDIO</div><h1 id="recordings-heading">Recordings</h1><p>Every take, with the voice and settings that made it.</p></div><span class="local-label"><span data-icon="device"></span>This browser</span></div><div class="library-toolbar"><div class="search-field"><span data-icon="search"></span><label class="sr-only" for="recording-search">Search recordings</label><input id="recording-search" type="search" placeholder="Search title, script, or voice"></div><span id="history-summary" class="subtle">0 recordings</span></div><div id="history-message" class="message" role="status" hidden></div><div id="all-recordings" class="recordings-list"></div>
+      </section>
+      <footer class="main-footer"><span>Fish Studio <span>·</span> Audio, in your own voice.</span><span>Scripts are sent to Fish Audio when you generate. <a href="https://fish.audio/privacy/" target="_blank" rel="noreferrer">Privacy ↗</a></span></footer>
+    </main>
+  </div>
+  <dialog id="voice-dialog"><form id="import-form"><div class="dialog-heading"><h2>Add a voice</h2><button type="button" id="close-dialog" class="icon-button" aria-label="Close dialog"><span data-icon="close"></span></button></div><p>Paste a Fish Audio voice link or its ID.</p><label for="import-id">Voice link or ID</label><input id="import-id" required placeholder="https://fish.audio/m/…" autocomplete="off"><p id="import-error" class="form-error" role="alert" hidden></p><button id="import-submit" type="submit" class="primary full">Find voice ↗</button></form></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div><audio id="voice-preview" preload="none" aria-label="Voice preview"></audio>
+</body>
+</html>
